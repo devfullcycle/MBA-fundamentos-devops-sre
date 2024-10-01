@@ -1,0 +1,11 @@
+name: Feature
+on:
+  push:
+    branches:
+      - 'feature**'
+      - 'fix**'
+    
+jobs:
+  ci-terraform:
+    uses: ./.github/workflows/ci-terraform.yml
+    secrets: inherit

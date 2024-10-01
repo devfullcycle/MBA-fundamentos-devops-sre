@@ -1,0 +1,78 @@
+name: 'CI Terraform'
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+  pull-requests: write
+  packages: read
+
+on:
+  workflow_call:
+    inputs:
+      settings-file:
+        description: 'Path to the settings file'
+        required: false
+        type: string
+        default: 'settings.yml'
+      runs-on:
+        description: 'Runner label to use'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  ci-terraform:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run YAML to Github Output Action
+        id: settings-parser
+        uses: christian-ci/action-yaml-github-output@v2
+        with:
+          file_path: './${{ inputs.settings-file }}'
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ steps.settings-parser.outputs.aws-region }}
+          role-to-assume: "arn:aws:iam::${{ steps.settings-parser.outputs.account-id }}:role/${{ github.event.repository.name }}"
+          mask-aws-account-id: false
+          role-skip-session-tagging: true
+          role-duration-seconds: 3600
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.settings-parser.outputs.terraform-version }}
+      
+      - name: Terraform fmt
+        id: fmt
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+        continue-on-error: true
+
+  create-pr:
+      name: Create PR to Main
+      runs-on: ${{ inputs.runs-on }}
+      needs:
+        - ci-terraform
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: pull-request-action
+          uses: vsoch/pull-request-action@master
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            PULL_REQUEST_BRANCH: "main"

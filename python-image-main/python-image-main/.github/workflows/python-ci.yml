@@ -1,0 +1,81 @@
+name: 'Python CI'
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+  pull-requests: write
+  packages: read
+
+on:
+  workflow_call:
+    inputs:
+      settings-file:
+        description: 'Path to the settings file'
+        required: false
+        type: string
+        default: 'settings.yml'
+      docker-file-path:
+        description: 'Path to the Dockerfile'
+        required: false
+        type: string
+        default: '.'
+      runs-on:
+        description: 'Runner label to use'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  ci-image:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run YAML to Github Output Action
+        id: settings-parser
+        uses: christian-ci/action-yaml-github-output@v2
+        with:
+          file_path: './${{ inputs.settings-file }}'      
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache -r ${{ steps.settings-parser.outputs.dependencies-path }}
+
+      - name: Linting
+        run: |
+          pip install pylint
+          pylint --errors-only src/*.py
+
+      - name: Pytest
+        run: |
+          pip install pytest
+          pytest src
+
+      - name: Upload pytest test results
+        uses: actions/upload-artifact@v4
+        # Use always() to always run this step to publish test results when there are test failures
+        if: ${{ always() }}
+        with:
+          name: pytest-results
+          path: test-results.xml
+
+  create-pr:
+    name: Create PR to Main
+    runs-on: ${{ inputs.runs-on }}
+    needs:
+      - ci-image
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pull-request-action
+        uses: vsoch/pull-request-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST_BRANCH: "main"

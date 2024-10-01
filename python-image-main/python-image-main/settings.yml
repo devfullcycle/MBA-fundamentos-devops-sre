@@ -1,0 +1,3 @@
+registry: 'manoelmineiro'
+repository: 'python-image'
+dependencies-path: 'src/requirements.txt'

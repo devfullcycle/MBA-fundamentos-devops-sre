@@ -1,0 +1,61 @@
+name: 'CD Terraform'
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+  pull-requests: write
+  packages: read
+
+on:
+  workflow_call:
+    inputs:
+      settings-file:
+        description: 'Path to the settings file'
+        required: false
+        type: string
+        default: 'settings.yml'
+      runs-on:
+        description: 'Runner label to use'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+      terraform-destroy:
+        required: false
+        type: string
+        default: 'false'
+
+jobs:
+  cd-terraform:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run YAML to Github Output Action
+        id: settings-parser
+        uses: christian-ci/action-yaml-github-output@v2
+        with:
+          file_path: './${{ inputs.settings-file }}'
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ steps.settings-parser.outputs.aws-region }}
+          role-to-assume: "arn:aws:iam::${{ steps.settings-parser.outputs.account-id }}:role/${{ github.event.repository.name }}"
+          mask-aws-account-id: false
+          role-skip-session-tagging: true
+          role-duration-seconds: 3600
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ steps.settings-parser.outputs.terraform-version }}
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false

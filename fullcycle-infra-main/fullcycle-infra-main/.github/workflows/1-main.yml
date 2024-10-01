@@ -1,0 +1,13 @@
+name: Main
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - 'main'
+    
+jobs:
+  terraform-apply:
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/cd-terraform.yml
+    secrets: inherit
